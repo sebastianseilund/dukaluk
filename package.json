@@ -9,7 +9,6 @@
   "author": "Sebastian Seilund <sebsei@gmail.com>",
   "license": "MIT",
   "dependencies": {
-    "async": "^1.5.0",
     "docker-allcontainers": "^0.4.0"
   }
 }

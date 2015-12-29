@@ -1,5 +1,3 @@
-//TODO: Try without async
-var async = require('async')
 var fs = require('fs')
 var allContainers = require('docker-allcontainers')
 
@@ -17,22 +15,20 @@ function onContainerStart(meta, container) {
         image: meta.image
     }
     log(container, 'Started')
-    async.waterfall([
-        container.inspect.bind(container),
-        function(info, callback) {
-            var env = parseEnv(info.Config.Env)
-            var appId = env.MARATHON_APP_ID
-            if (appId) {
-                containers[container.id].appId = appId
-                streamToFile(container, appId)
-            } else {
-                log(container, 'Not a Marathon app')
-                forget(container)
-                callback()
-            }
+    container.inspect(function(err, info) {
+        if (err) {
+            return handleError(err)
         }
-    ], handleError)
-
+        var env = parseEnv(info.Config.Env)
+        var appId = env.MARATHON_APP_ID
+        if (appId) {
+            containers[container.id].appId = appId
+            streamToFile(container, appId)
+        } else {
+            log(container, 'Not a Marathon app')
+            forget(container)
+        }
+    })
 }
 
 function parseEnv(env) {
@@ -44,25 +40,23 @@ function parseEnv(env) {
     return out
 }
 
-function streamToFile(container, appId, callback) {
+function streamToFile(container, appId) {
     var file = 'logs/' + appId + '-' + shortId(container) + '.log'
     var dest = fs.createWriteStream(file)
-    async.waterfall([
-        container.attach.bind(container, {stream: true, stdout: true, stderr: true}),
-        function(stream, callback) {
-            log(container, 'Streaming to ' + file)
-            container.modem.demuxStream(stream, dest, dest);
-            stream.on('end', callback)
+    container.attach({stream: true, stdout: true, stderr: true}, function(err, stream) {
+        if (err) {
+            return handleError(err)
         }
-    ], function(e) {
-        if (containers[container.id]) {
-            log(container, 'Stream ended unexpectedly')
-            //TODO: Restart? Example:
-            //streamToFile(container, appId, callback)
-        }
-        handleError(e)
+        log(container, 'Streaming to ' + file)
+        container.modem.demuxStream(stream, dest, dest);
+        stream.on('end', function() {
+            if (containers[container.id]) {
+                log(container, 'Stream ended unexpectedly')
+                //TODO: Restart? Example:
+                //streamToFile(container, appId, callback)
+            }
+        })
     })
-    //Never calls back
 }
 
 function onContainerStop(meta, container) {
