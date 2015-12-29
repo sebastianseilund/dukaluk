@@ -1,5 +1,8 @@
 var fs = require('fs')
+var path = require('path')
 var allContainers = require('docker-allcontainers')
+
+var LOG_DIR = process.env.LOG_DIR || path.join(__dirname, 'logs')
 
 containers = {}
 
@@ -41,7 +44,7 @@ function parseEnv(env) {
 }
 
 function streamToFile(container, appId) {
-    var file = 'logs/' + appId + '-' + shortId(container) + '.log'
+    var file = path.join(LOG_DIR, appId + '-' + shortId(container) + '.log')
     var dest = fs.createWriteStream(file)
     container.attach({stream: true, stdout: true, stderr: true}, function(err, stream) {
         if (err) {
