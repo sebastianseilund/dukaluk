@@ -1,5 +1,5 @@
 {
-  "name": "docker2log",
+  "name": "marathon-docker-logs",
   "version": "0.0.0",
   "description": "Monitors Docker start/stop events, attaches to containers, streams their output to log files on disk.",
   "main": "index.js",

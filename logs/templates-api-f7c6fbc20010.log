@@ -1,162 +1,0 @@
-src/controllers/delete.js -> lib/controllers/delete.js
-src/controllers/get.js -> lib/controllers/get.js
-src/controllers/list.js -> lib/controllers/list.js
-src/controllers/patch.js -> lib/controllers/patch.js
-src/controllers/post.js -> lib/controllers/post.js
-src/helpers/errors.js -> lib/helpers/errors.js
-src/helpers/parse-template-data.js -> lib/helpers/parse-template-data.js
-src/helpers/type-validators.js -> lib/helpers/type-validators.js
-src/helpers/validators/fallbackLocale.js -> lib/helpers/validators/fallbackLocale.js
-src/helpers/validators/name.js -> lib/helpers/validators/name.js
-src/helpers/validators/organizationId.js -> lib/helpers/validators/organizationId.js
-src/helpers/validators/variables/color.js -> lib/helpers/validators/variables/color.js
-src/helpers/validators/variables/cssProp.js -> lib/helpers/validators/variables/cssProp.js
-src/helpers/validators/variables/html.js -> lib/helpers/validators/variables/html.js
-src/helpers/validators/variables/integers.js -> lib/helpers/validators/variables/integers.js
-src/helpers/validators/variables/layoutEnum.js -> lib/helpers/validators/variables/layoutEnum.js
-src/helpers/validators/variables/stringFields.js -> lib/helpers/validators/variables/stringFields.js
-src/helpers/validators/variables/urls.js -> lib/helpers/validators/variables/urls.js
-src/logger.js -> lib/logger.js
-src/middleware/error-handler.js -> lib/middleware/error-handler.js
-src/resource-clients/access-tokens.js -> lib/resource-clients/access-tokens.js
-src/resource-clients/invoices.js -> lib/resource-clients/invoices.js
-src/resource-clients/organization-members.js -> lib/resource-clients/organization-members.js
-src/resource-clients/organizations.js -> lib/resource-clients/organizations.js
-src/resource-clients/templates.js -> lib/resource-clients/templates.js
-src/server.js -> lib/server.js
-src/vendor/resource-stub/index.js -> lib/vendor/resource-stub/index.js
-src/vendor/thrift-client-initializer/index.js -> lib/vendor/thrift-client-initializer/index.js
-
-
-  DELETE /organizations/:orgId/templates/:templateId
-    with valid id
-      ✓ checks org member once
-      ✓ calls the template.get and template.destroy stubs
-      ✓ responds with correct status
-      ✓ responds with no data
-    with invalid org id
-      ✓ fails with status 404
-
-  GET /organizations/:orgId/templates/:templateId
-    with valid id
-      ✓ checks org member once
-      ✓ calls the template.get stubs
-      ✓ responds with correct status
-      ✓ responds with correct data
-    with invalid org id
-      ✓ fails with status 404
-
-  GET /organizations/:orgId/templates
-    with valid org id
-      ✓ checks org member once
-      ✓ calls the template.get stubs
-      ✓ responds with correct status
-      ✓ responds with correct data
-    with invalid org id
-      ✓ fails with status 404
-
-  PATCH /organizations/:orgId/templates/:templateId
-    valid patch
-      ✓ calls update stub
-      ✓ returns with status 200
-      ✓ calls get stub twice (once to load, once after update)
-    removing locale
-      ✓ responds with 200
-    using invalid variable
-      ✓ correct stub calls
-      ✓ returns validation error
-
-  POST /organizations/:orgId/templates
-    with valid data
-      ✓ checks org member once
-      ✓ calls the templates stubs
-      ✓ calls templates.create() with correct data
-      ✓ responds with correct status
-      ✓ responds with correct data
-    with invalid org id
-      ✓ fails with status 404
-    with empty vars
-      ✓ fails with status 422
-    with invalid fontColor
-      ✓ checks org member once
-      ✓ does not call create and get stubs
-      ✓ responds with correct status
-      ✓ responds with validation error for fontColor
-
-  parseTemplateData()
-    simple ok validation
-      ✓ 0 errors
-    missing name and fallbackLocale
-      ✓ returns error on name and fallbackLocale
-    ok fontColor due to default
-      ✓ 0 errors
-    ok fontColor due to in every locale present
-      ✓ 0 errors
-    deleting a locale by nulling it
-      ✓ translates nullified locale to an empty object which is accepted by Thrift
-      ✓ 0 errors
-
-  validateTemplate()'s validators
-    name
-      ✓ good name
-      ✓ bad name
-    fallbackLocale
-      ✓ good fallbackLocale
-      ✓ bad fallbackLocale
-      ✓ bad fallbackLocale
-      ✓ bad fallbackLocale
-      ✓ bad fallbackLocale
-    organizationId
-      ✓ good organizationId
-      ✓ bad organizationId
-    color
-      ✓ good #fff
-      ✓ good #ffffff
-      ✓ good #000000
-      ✓ good #Fa0
-      ✓ bad #ff
-      ✓ bad #ffff
-      ✓ bad #fffff
-      ✓ bad #fffffff
-      ✓ bad fff
-      ✓ bad ffffff
-    cssProp
-      ✓ good "foo bar"
-      ✓ good ""
-      ✓ bad null
-    integers
-      ✓ good "0"
-      ✓ good 0
-      ✓ good "1"
-      ✓ good 1
-      ✓ bad null
-      ✓ bad undefined
-      ✓ bad "1.1"
-      ✓ bad 1.1
-    layoutEnum
-      ✓ good "default"
-      ✓ bad "other"
-    stringFields
-      ✓ good "foobar"
-      ✓ good "foo bar"
-      ✓ good ""
-      ✓ bad null
-      ✓ bad undefined
-      ✓ bad 1.0
-    html
-      ✓ good "foobar"
-      ✓ good "foo bar"
-      ✓ good ""
-      ✓ keeps good html
-      ✓ strips bad html
-      ✓ bad null
-      ✓ bad undefined
-      ✓ bad 1.0
-    urls
-      ✓ good "https://foo.bar/baz.png"
-      ✓ bad "https//foo.bar/baz.png"
-      ✓ bad "htt//foo.bar/baz.png"
-
-
-  87 passing (1s)
-

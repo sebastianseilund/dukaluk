@@ -7,6 +7,6 @@ COPY package.json /app/
 RUN npm install
 COPY . /app
 
-ENV LOG_DIR=/var/log/docker2log
+ENV LOG_DIR=/var/log/apps
 
 CMD ["node", "index.js"]
