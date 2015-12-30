@@ -26,7 +26,8 @@ function onContainerStart(meta, container) {
         var appId = env.MARATHON_APP_ID
         if (appId) {
             containers[container.id].appId = appId
-            streamToFile(container, appId)
+            containers[container.id].logPath = env.MARATHON_DOCKER_LOGS_PATH
+            streamLogs(container)
         } else {
             log(container, 'Not a Marathon app')
             forget(container)
@@ -43,23 +44,47 @@ function parseEnv(env) {
     return out
 }
 
-function streamToFile(container, appId) {
-    var file = path.join(LOG_DIR, appId + '-' + shortId(container) + '.log')
-    var dest = fs.createWriteStream(file)
-    container.attach({stream: true, stdout: true, stderr: true}, function(err, stream) {
+function streamLogs(container) {
+    var c = containers[container.id]
+    var fn = c.logPath ? getLogPathStream : getAttachStream
+    fn(container, function(err, stream) {
         if (err) {
             return handleError(err)
         }
-        log(container, 'Streaming to ' + file)
+
+        var destFile = path.join(LOG_DIR, c.appId + '-' + shortId(container) + '.log')
+        var dest = fs.createWriteStream(destFile)
+
         container.modem.demuxStream(stream, dest, dest);
-        stream.on('end', function() {
+
+        if (c.logPath) {
+            log(container, 'Streaming from ' + c.logPath + ' to ' + destFile)
+        } else {
+            log(container, 'Attached and streaming to ' + destFile)
+        }
+
+        stream.on('end', function(e) {
             if (containers[container.id]) {
                 log(container, 'Stream ended unexpectedly')
                 //TODO: Restart? Example:
-                //streamToFile(container, appId, callback)
+                //streamLogs(container)
             }
         })
     })
+}
+
+function getLogPathStream(container, callback) {
+    var c = containers[container.id]
+    container.exec({Cmd: ['tail', '-f', c.logPath], AttachStdout: true, AttachStderr: true}, function(err, exec) {
+        if (err) {
+            return callback(err)
+        }
+        exec.start(callback)
+    })
+}
+
+function getAttachStream(container, callback) {
+    container.attach({stream: true, stdout: true, stderr: true}, callback)
 }
 
 function onContainerStop(meta, container) {
