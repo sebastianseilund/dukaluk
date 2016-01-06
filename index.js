@@ -7,7 +7,7 @@ var ENV_WHITELIST = (process.env.ENV_WHITELIST || '')
     .split(',')
     .filter(function(v) { return !!v })
 
-containers = {}
+var handlers = {}
 
 var ac = allContainers({
     preheat: true,
@@ -17,27 +17,27 @@ ac.on('start', onContainerStart)
 ac.on('stop', onContainerStop)
 
 function onContainerStart(meta, container) {
-    var c = new Container(container, meta)
-    c.onStart()
+    var h = new Handler(container, meta)
+    h.onStart()
 }
 
 function onContainerStop(meta, container) {
-    var c = containers[container.id]
-    if (c) {
-        c.onStop()
+    var h = handlers[container.id]
+    if (h) {
+        h.onStop()
     }
 }
 
-function Container(container, meta) {
+function Handler(container, meta) {
     this.id = container.id
     this.shortId = container.id.substring(0, 12)
     this.container = container
     this.meta = meta
 
-    containers[this.id] = this
+    handlers[this.id] = this
 }
 
-Container.prototype.onStart = function() {
+Handler.prototype.onStart = function() {
     var self = this
     this.log('Started')
     this.container.inspect(function(err, info) {
@@ -54,19 +54,19 @@ Container.prototype.onStart = function() {
     })
 }
 
-Container.prototype.whitelisted = function() {
+Handler.prototype.whitelisted = function() {
     var self = this
     return ENV_WHITELIST.every(function(key) {
         return !!self.env[key]
     })
 }
 
-Container.prototype.init = function() {
+Handler.prototype.init = function() {
     this.initContainerStream()
     this.initLogstash()
 }
 
-Container.prototype.initContainerStream = function() {
+Handler.prototype.initContainerStream = function() {
     var self = this
     this.getContainerStream(function(err, stream) {
         if (err) {
@@ -91,7 +91,7 @@ Container.prototype.initContainerStream = function() {
     })
 }
 
-Container.prototype.getContainerStream = function(callback) {
+Handler.prototype.getContainerStream = function(callback) {
     if (this.env.DUKALUK_CONTAINER_PATH) {
         this.getLogPathStream(callback)
     } else {
@@ -99,7 +99,7 @@ Container.prototype.getContainerStream = function(callback) {
     }
 }
 
-Container.prototype.getLogPathStream = function(callback) {
+Handler.prototype.getLogPathStream = function(callback) {
     var self = this
     var logPath = this.env.DUKALUK_CONTAINER_PATH
     this.container.exec({Cmd: ['tail', '-f', logPath], AttachStdout: true, AttachStderr: true}, function(err, exec) {
@@ -116,7 +116,7 @@ Container.prototype.getLogPathStream = function(callback) {
     })
 }
 
-Container.prototype.getAttachStream = function(callback) {
+Handler.prototype.getAttachStream = function(callback) {
     var self = this
     this.container.attach({stream: true, stdout: true, stderr: true}, function(err, stream) {
         if (err) {
@@ -127,7 +127,7 @@ Container.prototype.getAttachStream = function(callback) {
     })
 }
 
-Container.prototype.initLogstash = function(callback) {
+Handler.prototype.initLogstash = function(callback) {
     var self = this
     this.logstashReconnect = reconnectNet(function(socket) {
         self.log('Connected to Logstash')
@@ -152,7 +152,7 @@ Container.prototype.initLogstash = function(callback) {
     })
 }
 
-Container.prototype.pipeToLogstash = function() {
+Handler.prototype.pipeToLogstash = function() {
     if (!this.containerStream || !this.logstashSocket) {
         return
     }
@@ -160,16 +160,16 @@ Container.prototype.pipeToLogstash = function() {
     this.container.modem.demuxStream(this.containerStream, this.logstashSocket, this.logstashSocket)
 }
 
-Container.prototype.log = function(message) {
+Handler.prototype.log = function(message) {
     console.log('[' + new Date().toISOString() + '] id=' + this.shortId + ' image=' + this.meta.image + ': ' + message)
 }
 
-Container.prototype.onStop = function() {
+Handler.prototype.onStop = function() {
     this.log('Stopped')
     this.destroy()
 }
 
-Container.prototype.destroy = function() {
+Handler.prototype.destroy = function() {
     this.destroyed = true
     if (this.containerStream) {
         this.containerStream.unpipe()
@@ -177,7 +177,7 @@ Container.prototype.destroy = function() {
     if (this.logstashReconnect) {
         this.logstashReconnect.disconnect()
     }
-    delete containers[this.id]
+    delete handlers[this.id]
 }
 
 function handleError(e) {
