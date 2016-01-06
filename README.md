@@ -10,3 +10,4 @@ TODO
 
 - Do we miss any events in the beginning between the Docker container starts and we actually attach from here?
 - Docs
+- Tests
