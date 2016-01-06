@@ -1,8 +1,8 @@
-var fs = require('fs')
-var path = require('path')
+var reconnectNet = require('reconnect-net')
 var allContainers = require('docker-allcontainers')
 
-var LOG_DIR = process.env.LOG_DIR || path.join(__dirname, 'logs')
+var LOGSTASH_HOST = process.env.LOGSTASH_HOST || 'localhost'
+var LOGSTASH_PORT = process.env.LOGSTASH_PORT || 50917
 
 containers = {}
 
@@ -10,29 +10,166 @@ var ac = allContainers({
     preheat: true,
     docker: null
 })
-.on('start', onContainerStart)
-.on('stop', onContainerStop)
+ac.on('start', onContainerStart)
+ac.on('stop', onContainerStop)
 
 function onContainerStart(meta, container) {
-    containers[container.id] = {
-        image: meta.image
-    }
-    log(container, 'Started')
-    container.inspect(function(err, info) {
+    var c = new Container(container, meta)
+    c.onStart()
+}
+
+function onContainerStop(meta, container) {
+    var c = containers[container.id]
+    c.onStop()
+}
+
+function Container(container, meta) {
+    this.id = container.id
+    this.shortId = container.id.substring(0, 12)
+    this.container = container
+    this.meta = meta
+
+    containers[this.id] = this
+}
+
+Container.prototype.onStart = function() {
+    var self = this
+    this.log('Started')
+    this.container.inspect(function(err, info) {
         if (err) {
             return handleError(err)
         }
-        var env = parseEnv(info.Config.Env)
-        var appId = env.MARATHON_APP_ID
-        if (appId) {
-            containers[container.id].appId = appId
-            containers[container.id].logPath = env.MARATHON_DOCKER_LOGS_PATH
-            streamLogs(container)
+        self.env = parseEnv(info.Config.Env)
+        if (self.env.MARATHON_APP_ID) {
+            self.init()
         } else {
-            log(container, 'Not a Marathon app')
-            forget(container)
+            self.log('Not a Marathon app')
+            self.destroy()
         }
     })
+}
+
+Container.prototype.init = function() {
+    this.initContainerStream()
+    this.initLogstash()
+}
+
+Container.prototype.initContainerStream = function() {
+    var self = this
+    this.getContainerStream(function(err, stream) {
+        if (err) {
+            //TODO: Should we retry?
+            return handleError(err)
+        }
+
+        self.containerStream = stream
+
+        stream.on('end', function(e) {
+            if (!self.destroyed) {
+                self.log('Container stream ended unexpectedly, will try to re-attach')
+                self.containerStream = null
+
+                //Try again
+                //TODO: Backoff?
+                self.initLogStream()
+            }
+        })
+
+        self.pipeFun()
+    })
+}
+
+Container.prototype.getContainerStream = function(callback) {
+    if (this.env.MARATHON_DOCKER_LOGS_PATH) {
+        this.getLogPathStream(callback)
+    } else {
+        this.getAttachStream(callback)
+    }
+}
+
+Container.prototype.getLogPathStream = function(callback) {
+    var self = this
+    var logPath = this.env.MARATHON_DOCKER_LOGS_PATH
+    this.container.exec({Cmd: ['tail', '-f', logPath], AttachStdout: true, AttachStderr: true}, function(err, exec) {
+        if (err) {
+            return callback(err)
+        }
+        exec.start(function(err, stream) {
+            if (err) {
+                return callback(err)
+            }
+            self.log('Tailing ' + logPath)
+            callback(null, stream)
+        })
+    })
+}
+
+Container.prototype.getAttachStream = function(callback) {
+    var self = this
+    this.container.attach({stream: true, stdout: true, stderr: true}, function(err, stream) {
+        if (err) {
+            return callback(err)
+        }
+        self.log('Attached')
+        callback(null, stream)
+    })
+}
+
+Container.prototype.initLogstash = function(callback) {
+    var self = this
+    this.logstashReconnect = reconnectNet(function(socket) {
+        self.log('Connected to Logstash')
+        self.logstashSocket = socket
+        self.pipeFun()
+    })
+    reconnect.connect({
+        host: LOGSTASH_HOST,
+        port: LOGSTASH_PORT
+    })
+    reconnect.on('disconnect', function() {
+        self.log('Disconnected from Logstash')
+        self.logstashSocket = null
+    })
+    reconnect.on('reconnect', function(n) {
+        self.log('Reconnecting to Logstash (' + n + ')')
+    })
+}
+
+Container.prototype.pipeFun = function() {
+    if (!this.containerStream || !this.logstashSocket) {
+        return
+    }
+    this.log('Piping')
+    this.container.modem.demuxStream(this.containerStream, this.logstashSocket, this.logstashSocket)
+}
+
+Container.prototype.log = function(message) {
+    var appId = this.env.MARATHON_APP_ID
+    console.log('[' + new Date().toISOString() + '] id=' + this.shortId + ' image=' + this.meta.image + (appId ? ' marathon=' + appId : '') + ': ' + message)
+}
+
+Container.prototype.onStop = function() {
+    this.log('Stopped')
+    this.destroy()
+}
+
+Container.prototype.destroy = function() {
+    this.destroyed = true
+    if (this.containerStream) {
+        this.containerStream.unpipe()
+    }
+    if (this.logstashReconnect) {
+        this.logstashReconnect.disconnect()
+    }
+    delete containers[this.id]
+}
+
+function handleError(e) {
+    if (!e) {
+        return
+    }
+    console.error('ERROR')
+    console.error(e.stack || e.message)
 }
 
 function parseEnv(env) {
@@ -42,78 +179,4 @@ function parseEnv(env) {
         out[s[0]] = s[1]
     })
     return out
-}
-
-function streamLogs(container) {
-    var c = containers[container.id]
-    var fn = c.logPath ? getLogPathStream : getAttachStream
-    fn(container, function(err, stream) {
-        if (err) {
-            return handleError(err)
-        }
-
-        var destFile = path.join(LOG_DIR, c.appId + '-' + shortId(container) + '.log')
-        var dest = fs.createWriteStream(destFile)
-
-        container.modem.demuxStream(stream, dest, dest);
-
-        if (c.logPath) {
-            log(container, 'Streaming from ' + c.logPath + ' to ' + destFile)
-        } else {
-            log(container, 'Attached and streaming to ' + destFile)
-        }
-
-        stream.on('end', function(e) {
-            if (containers[container.id]) {
-                log(container, 'Stream ended unexpectedly')
-                //TODO: Restart? Example:
-                //streamLogs(container)
-            }
-        })
-    })
-}
-
-function getLogPathStream(container, callback) {
-    var c = containers[container.id]
-    container.exec({Cmd: ['tail', '-f', c.logPath], AttachStdout: true, AttachStderr: true}, function(err, exec) {
-        if (err) {
-            return callback(err)
-        }
-        exec.start(callback)
-    })
-}
-
-function getAttachStream(container, callback) {
-    container.attach({stream: true, stdout: true, stderr: true}, callback)
-}
-
-function onContainerStop(meta, container) {
-    log(container, 'Stopped')
-    forget(container)
-}
-
-function forget(container) {
-    var dest = containers[container.id].dest
-    if (dest) {
-        dest.end()
-    }
-    //TODO: Should we close the attach stream too just in case?
-    delete containers[container.id]
-}
-
-function log(container, message) {
-    var c = containers[container.id]
-    console.log('[' + new Date().toISOString() + '] id=' + shortId(container) + ' image=' + c.image + (c.appId ? ' marathon=' + c.appId : '') + ': ' + message)
-}
-
-function shortId(container) {
-    return container.id.substring(0, 12)
-}
-
-function handleError(e) {
-    if (!e) {
-        return
-    }
-    console.error('ERROR')
-    console.error(e.stack || e.message)
 }
