@@ -1,6 +1,6 @@
 {
   "name": "dukaluk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Monitors Docker start/stop events, attaches to containers, streams their output to Logstash.",
   "main": "index.js",
   "scripts": {
