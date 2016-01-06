@@ -1,7 +1,7 @@
 {
-  "name": "marathon-docker-logs",
+  "name": "dukaluk",
   "version": "0.2.0",
-  "description": "Monitors Docker start/stop events, attaches to containers, streams their output to log files on disk.",
+  "description": "Monitors Docker start/stop events, attaches to containers, streams their output to Logstash.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"

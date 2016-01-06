@@ -3,6 +3,9 @@ var allContainers = require('docker-allcontainers')
 
 var LOGSTASH_HOST = process.env.LOGSTASH_HOST || 'localhost'
 var LOGSTASH_PORT = process.env.LOGSTASH_PORT || 50917
+var ENV_WHITELIST = (process.env.CONTAINER_ENV_WHITELIST || '')
+    .split(',')
+    .filter(function(v) { return !!v })
 
 containers = {}
 
@@ -40,12 +43,19 @@ Container.prototype.onStart = function() {
             return handleError(err)
         }
         self.env = parseEnv(info.Config.Env)
-        if (self.env.MARATHON_APP_ID) {
+        if (this.whitelisted()) {
             self.init()
         } else {
-            self.log('Not a Marathon app')
+            self.log('Not whitelisted, ignoring')
             self.destroy()
         }
+    })
+}
+
+Container.prototype.whitelisted = function() {
+    var self = this
+    return ENV_WHITELIST.every(function(key) {
+        return !!self.env[key]
     })
 }
 
@@ -80,7 +90,7 @@ Container.prototype.initContainerStream = function() {
 }
 
 Container.prototype.getContainerStream = function(callback) {
-    if (this.env.MARATHON_DOCKER_LOGS_PATH) {
+    if (this.env.DUKALUK_CONTAINER_PATH) {
         this.getLogPathStream(callback)
     } else {
         this.getAttachStream(callback)
@@ -89,7 +99,7 @@ Container.prototype.getContainerStream = function(callback) {
 
 Container.prototype.getLogPathStream = function(callback) {
     var self = this
-    var logPath = this.env.MARATHON_DOCKER_LOGS_PATH
+    var logPath = this.env.DUKALUK_CONTAINER_PATH
     this.container.exec({Cmd: ['tail', '-f', logPath], AttachStdout: true, AttachStderr: true}, function(err, exec) {
         if (err) {
             return callback(err)
@@ -144,8 +154,7 @@ Container.prototype.pipeFun = function() {
 }
 
 Container.prototype.log = function(message) {
-    var appId = this.env.MARATHON_APP_ID
-    console.log('[' + new Date().toISOString() + '] id=' + this.shortId + ' image=' + this.meta.image + (appId ? ' marathon=' + appId : '') + ': ' + message)
+    console.log('[' + new Date().toISOString() + '] id=' + this.shortId + ' image=' + this.meta.image + ': ' + message)
 }
 
 Container.prototype.onStop = function() {
