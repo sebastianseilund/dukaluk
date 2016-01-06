@@ -3,7 +3,7 @@ var allContainers = require('docker-allcontainers')
 
 var LOGSTASH_HOST = process.env.LOGSTASH_HOST || 'localhost'
 var LOGSTASH_PORT = process.env.LOGSTASH_PORT || 50917
-var ENV_WHITELIST = (process.env.CONTAINER_ENV_WHITELIST || '')
+var ENV_WHITELIST = (process.env.ENV_WHITELIST || '')
     .split(',')
     .filter(function(v) { return !!v })
 
@@ -23,7 +23,9 @@ function onContainerStart(meta, container) {
 
 function onContainerStop(meta, container) {
     var c = containers[container.id]
-    c.onStop()
+    if (c) {
+        c.onStop()
+    }
 }
 
 function Container(container, meta) {
@@ -43,7 +45,7 @@ Container.prototype.onStart = function() {
             return handleError(err)
         }
         self.env = parseEnv(info.Config.Env)
-        if (this.whitelisted()) {
+        if (self.whitelisted()) {
             self.init()
         } else {
             self.log('Not whitelisted, ignoring')
@@ -132,15 +134,20 @@ Container.prototype.initLogstash = function(callback) {
         self.logstashSocket = socket
         self.pipeFun()
     })
-    reconnect.connect({
+    this.logstashReconnect.connect({
         host: LOGSTASH_HOST,
         port: LOGSTASH_PORT
     })
-    reconnect.on('disconnect', function() {
-        self.log('Disconnected from Logstash')
+    this.logstashReconnect.on('error', function(e) {
+        self.log('Logstash error: ' + e.message)
+    })
+    this.logstashReconnect.on('disconnect', function() {
+        if (!self.destroyed) {
+            self.log('Disconnected from Logstash')
+        }
         self.logstashSocket = null
     })
-    reconnect.on('reconnect', function(n) {
+    this.logstashReconnect.on('reconnect', function(n) {
         self.log('Reconnecting to Logstash (' + n + ')')
     })
 }
@@ -150,7 +157,7 @@ Container.prototype.pipeFun = function() {
         return
     }
     this.log('Piping')
-    this.container.modem.demuxStream(this.containerStream, this.logstashSocket, this.logstashSocket)
+    this.containerStream.pipe(this.logstashSocket)
 }
 
 Container.prototype.log = function(message) {

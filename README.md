@@ -9,5 +9,6 @@ Inspired by http://www.elastic.io/en/log-aggregation-for-docker-containers-in-me
 TODO
 
 - Do we miss any events in the beginning between the Docker container starts and we actually attach from here?
+- Should we continue to open a connection to Logstash for each container, or should we share a single one?
 - Docs
 - Tests
