@@ -87,7 +87,7 @@ Container.prototype.initContainerStream = function() {
             }
         })
 
-        self.pipeFun()
+        self.pipeToLogstash()
     })
 }
 
@@ -132,7 +132,7 @@ Container.prototype.initLogstash = function(callback) {
     this.logstashReconnect = reconnectNet(function(socket) {
         self.log('Connected to Logstash')
         self.logstashSocket = socket
-        self.pipeFun()
+        self.pipeToLogstash()
     })
     this.logstashReconnect.connect({
         host: LOGSTASH_HOST,
@@ -152,12 +152,12 @@ Container.prototype.initLogstash = function(callback) {
     })
 }
 
-Container.prototype.pipeFun = function() {
+Container.prototype.pipeToLogstash = function() {
     if (!this.containerStream || !this.logstashSocket) {
         return
     }
     this.log('Piping')
-    this.containerStream.pipe(this.logstashSocket)
+    this.container.modem.demuxStream(this.containerStream, this.logstashSocket, this.logstashSocket)
 }
 
 Container.prototype.log = function(message) {
