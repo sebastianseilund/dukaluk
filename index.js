@@ -83,7 +83,7 @@ Handler.prototype.initContainerStream = function() {
 
                 //Try again
                 //TODO: Backoff?
-                self.initLogStream()
+                self.initContainerStream()
             }
         })
 
