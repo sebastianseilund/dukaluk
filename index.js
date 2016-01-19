@@ -1,6 +1,7 @@
 var reconnectNet = require('reconnect-net')
 var allContainers = require('docker-allcontainers')
 
+var EXEC_DELAY = 500
 var LOGSTASH_HOST = process.env.LOGSTASH_HOST || 'localhost'
 var LOGSTASH_PORT = process.env.LOGSTASH_PORT || 50917
 var ENV_WHITELIST = (process.env.ENV_WHITELIST || '')
@@ -102,18 +103,25 @@ Handler.prototype.getContainerStream = function(callback) {
 Handler.prototype.getLogPathStream = function(callback) {
     var self = this
     var logPath = this.env.DUKALUK_CONTAINER_PATH
-    this.container.exec({Cmd: ['tail', '-f', logPath], AttachStdout: true, AttachStderr: true}, function(err, exec) {
-        if (err) {
-            return callback(err)
-        }
-        exec.start(function(err, stream) {
+    /*
+    Wait 500ms before exec'ing. We have experienced cases where the `tail`
+    process gets pid 1, which we suspect can cause trouble with killing the
+    container itself (`docker stop` hangs forever).
+    */
+    setTimeout(function() {
+        self.container.exec({Cmd: ['tail', '-f', logPath], AttachStdout: true, AttachStderr: true}, function(err, exec) {
             if (err) {
                 return callback(err)
             }
-            self.log('Tailing ' + logPath)
-            callback(null, stream)
+            exec.start(function(err, stream) {
+                if (err) {
+                    return callback(err)
+                }
+                self.log('Tailing ' + logPath)
+                callback(null, stream)
+            })
         })
-    })
+    }, EXEC_DELAY)
 }
 
 Handler.prototype.getAttachStream = function(callback) {
