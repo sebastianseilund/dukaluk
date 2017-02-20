@@ -109,7 +109,7 @@ Handler.prototype.getLogPathStream = function(callback) {
     container itself (`docker stop` hangs forever).
     */
     setTimeout(function() {
-        self.container.exec({Cmd: ['tail', '-f', logPath], AttachStdout: true, AttachStderr: true}, function(err, exec) {
+        self.container.exec({Cmd: ['tail', '-F', logPath], AttachStdout: true, AttachStderr: true}, function(err, exec) {
             if (err) {
                 return callback(err)
             }
